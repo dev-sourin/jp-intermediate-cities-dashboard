@@ -4,6 +4,8 @@
 
 外部CDNに一切依存しない単一HTMLファイルで、オフラインでもそのまま動作します。
 
+**公開URL:** https://jp-intermediate-cities-dashboard.vercel.app
+
 ## 機能
 
 | タブ | 内容 |
