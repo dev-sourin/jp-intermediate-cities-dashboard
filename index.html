@@ -170,21 +170,21 @@
   #jpMap circle:hover{ stroke:var(--text); stroke-width:2; }
   #jpMap circle:focus-visible{ outline:none; stroke:var(--text); stroke-width:3; }
   #jpMap circle.sel{ stroke:var(--text); stroke-width:3; }
-  .map-zoom-controls{ position:absolute; top:12px; right:12px; display:flex; flex-direction:column; gap:6px; z-index:5; }
+  .map-zoom-controls{ position:absolute; top:10px; right:10px; display:flex; flex-direction:column; gap:5px; z-index:5; }
   .map-zoom-controls button{
-    background:var(--card); border:1px solid var(--border); border-radius:8px; color:var(--text);
-    font-family:inherit; font-size:1rem; font-weight:700; min-width:40px; min-height:40px; padding:6px 12px; cursor:pointer;
+    background:var(--card); border:1px solid var(--border); border-radius:6px; color:var(--text);
+    font-family:inherit; font-size:.82rem; font-weight:700; min-width:30px; min-height:30px; padding:2px 8px; cursor:pointer;
     box-shadow:0 1px 4px rgba(0,0,0,.12); line-height:1;
   }
   .map-zoom-controls button:hover{ color:var(--accent); border-color:var(--accent); }
-  .map-zoom-controls button#zoomReset{ font-size:.68rem; font-weight:600; white-space:nowrap; }
+  .map-zoom-controls button#zoomReset{ font-size:.62rem; font-weight:600; white-space:nowrap; min-height:26px; }
   .map-tooltip{
     position:absolute; z-index:10; pointer-events:none; background:var(--text); color:var(--card);
-    padding:8px 12px; border-radius:8px; font-size:.8rem; line-height:1.6; box-shadow:0 6px 18px rgba(0,0,0,.2);
-    opacity:0; transform:translate(-50%,-100%); transition:opacity .1s; max-width:220px; white-space:nowrap;
+    padding:5px 9px; border-radius:6px; font-size:.72rem; line-height:1.5; box-shadow:0 4px 12px rgba(0,0,0,.2);
+    opacity:0; transform:translate(-50%,-100%); transition:opacity .1s; max-width:180px; white-space:nowrap;
   }
   .map-tooltip.show{ opacity:1; }
-  .map-tooltip b{ display:block; font-size:.86rem; }
+  .map-tooltip b{ display:block; font-size:.78rem; }
   .legend{ display:flex; gap:8px 16px; flex-wrap:wrap; margin-top:14px; font-size:.78rem; color:var(--muted); }
   .legend .dot{ display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:6px; vertical-align:middle; }
 
@@ -289,6 +289,7 @@
   <button class="tab-btn" id="tabbtn-industry" data-tab="industry" role="tab" aria-selected="false" aria-controls="tab-industry">産業分析</button>
   <button class="tab-btn" id="tabbtn-compare" data-tab="compare" role="tab" aria-selected="false" aria-controls="tab-compare">都市比較</button>
   <button class="tab-btn" id="tabbtn-match" data-tab="match" role="tab" aria-selected="false" aria-controls="tab-match">産業マッチング</button>
+  <button class="tab-btn" id="tabbtn-intramatch" data-tab="intramatch" role="tab" aria-selected="false" aria-controls="tab-intramatch">県内マッチング</button>
   <button class="tab-btn" id="tabbtn-list" data-tab="list" role="tab" aria-selected="false" aria-controls="tab-list">一覧</button>
 </div></nav>
 
@@ -405,6 +406,36 @@
             </tr>
           </thead>
           <tbody id="matchTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section class="tabpanel" id="tab-intramatch" role="tabpanel" aria-labelledby="tabbtn-intramatch">
+    <div class="card" style="margin-bottom:20px;">
+      <h2>県内マッチング</h2>
+      <p class="sub">同じ都道府県(行政区域)内にある市どうしの産業の相性を一覧できます。県境をまたがない連携先を探したいときに使ってください。</p>
+      <div class="note">
+        <b>この提案の考え方</b>: 産業マッチングタブと同じ「特色」カテゴリ同士の構造的な目安です。ここでは対象を同一都道府県内の市に絞っています。データセットには政令指定都市や小規模市を含まないため、実際にはより多くの市が県内に存在します。
+      </div>
+      <label class="sr-only" for="intraPrefSelect">都道府県を選択</label>
+      <select id="intraPrefSelect"><option value="">都道府県を選択(2市以上ある県のみ表示)...</option></select>
+    </div>
+    <div id="intraEmpty" class="empty-state">都道府県を選ぶと、県内の市どうしの組み合わせを相性順に表示します。</div>
+    <div id="intraContent" style="display:none;">
+      <div class="count-badge" id="intraCountBadge" style="margin-bottom:10px;"></div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th scope="col">順位</th>
+              <th scope="col">組み合わせ</th>
+              <th scope="col">特色</th>
+              <th scope="col">相性</th>
+              <th scope="col">理由</th>
+            </tr>
+          </thead>
+          <tbody id="intraTableBody"></tbody>
         </table>
       </div>
     </div>
@@ -1069,6 +1100,45 @@ matchSearch.addEventListener('input', ()=>{
   }));
 });
 document.addEventListener('click', e=>{ if(!e.target.closest('#tab-match .compare-picker')) matchSuggest.classList.remove('open'); });
+
+/* ---------- Industry matching: within the same prefecture (行政区域) ---------- */
+const prefCityCounts = new Map();
+DATA.forEach(d=> prefCityCounts.set(d.prefecture, (prefCityCounts.get(d.prefecture)||0) + 1));
+const intraPrefSelect = document.getElementById('intraPrefSelect');
+prefectures.filter(p=> prefCityCounts.get(p) >= 2).forEach(p=>{
+  const o = document.createElement('option');
+  o.value = p; o.textContent = `${p}(${prefCityCounts.get(p)}市)`;
+  intraPrefSelect.appendChild(o);
+});
+function renderIntraMatch(){
+  const empty = document.getElementById('intraEmpty');
+  const content = document.getElementById('intraContent');
+  const pref = intraPrefSelect.value;
+  if(!pref){ empty.style.display='block'; content.style.display='none'; return; }
+  empty.style.display='none'; content.style.display='block';
+  const cities = DATA.filter(d=>d.prefecture===pref).sort((a,b)=>b.population-a.population);
+  const pairs = [];
+  for(let i=0;i<cities.length;i++){
+    for(let j=i+1;j<cities.length;j++){
+      const a = cities[i], b = cities[j];
+      const { score, reason } = affinityOf(a.category, b.category);
+      pairs.push({ a, b, score, reason });
+    }
+  }
+  pairs.sort((x,y)=> y.score - x.score || (y.a.population+y.b.population) - (x.a.population+x.b.population));
+  document.getElementById('intraCountBadge').textContent = `${pref}: 対象${cities.length}市 / 組み合わせ${pairs.length}件`;
+  document.getElementById('intraTableBody').innerHTML = pairs.map(({a,b,score,reason},i)=>{
+    const badge = scoreBadge(score);
+    return `<tr>
+      <td>${i+1}</td>
+      <td><b>${a.city}</b> × <b>${b.city}</b></td>
+      <td><span class="tag" style="background:${catColor(a.category)}">${a.category}</span> <span class="tag" style="background:${catColor(b.category)}">${b.category}</span></td>
+      <td><span class="match-score ${badge.cls}">${badge.label}</span></td>
+      <td class="match-reason">${reason}</td>
+    </tr>`;
+  }).join('');
+}
+intraPrefSelect.addEventListener('change', renderIntraMatch);
 
 /* ---------- init ---------- */
 updateSortArrows();
