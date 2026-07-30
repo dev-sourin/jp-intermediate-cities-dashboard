@@ -131,6 +131,7 @@
   tbody tr.compare-row{ box-shadow:inset 3px 0 0 var(--s1); }
   tbody tr.selected-row.compare-row{ box-shadow:inset 3px 0 0 var(--accent), inset 6px 0 0 var(--s1); }
   .pop{ font-variant-numeric:tabular-nums; text-align:right; white-space:nowrap; }
+  tbody td.univ-cell{ min-width:160px; max-width:220px; font-size:.78rem; }
   tbody td.desc{
     color:var(--muted); font-size:.82rem; line-height:1.6;
     white-space:normal; min-width:230px; max-width:340px;
@@ -303,6 +304,7 @@
     thead th, tbody td, tbody th{ padding:8px 9px; }
     .th-sort{ padding:8px 9px; }
     tbody td.desc{ min-width:180px; max-width:240px; }
+    tbody td.univ-cell{ min-width:130px; max-width:170px; }
 
     .info-panel{ padding:16px; }
     .info-panel dl{ grid-template-columns:1fr 1fr; gap:8px 14px; }
@@ -518,6 +520,7 @@
             <th class="sortable" scope="col" data-key="pct2"><button type="button" class="th-sort">2次 <span class="sort-arrow" data-arrow="pct2"></span></button></th>
             <th class="sortable" scope="col" data-key="pct3"><button type="button" class="th-sort">3次 <span class="sort-arrow" data-arrow="pct3"></span></button></th>
             <th scope="col">産業構成</th>
+            <th scope="col">大学</th>
             <th scope="col">説明</th>
           </tr>
         </thead>
@@ -755,6 +758,7 @@ function renderInfoPanel(){
       <dt>人口</dt><dd>${d.population.toLocaleString()}人(全国${d.rank}位)</dd>
       <dt>産業構成タイプ</dt><dd>${d.industryType}</dd>
       <dt>就業者構成</dt><dd>1次 ${d.pct1}% / 2次 ${d.pct2}% / 3次 ${d.pct3}%</dd>
+      ${hasTag(d,'university') ? `<dt>大学</dt><dd>${(d.tags.find(t=>t.key==='university').items).join('、')}</dd>` : ''}
     </dl>
     <div class="sector-bar" style="width:100%;">
       <span style="width:${d.pct1}%;background:var(--s1)"></span>
@@ -791,6 +795,11 @@ function tagBadges(d){
   ).join('');
 }
 function tagSearchText(d){ return (d.tags||[]).flatMap(t=>[t.label, ...t.items]).join(' '); }
+function univList(d){
+  const t = (d.tags||[]).find(t=>t.key==='university');
+  if(!t || !t.items.length) return '<span style="color:var(--muted);">—</span>';
+  return t.items.map(n=>`・${n}`).join('<br>');
+}
 
 /* region -> prefecture narrows the prefecture list so the two filters work together, not against each other */
 regionSel.addEventListener('change', ()=>{
@@ -844,6 +853,7 @@ function renderTable(){
       <td><span class="tag" style="background:${catColor(d.category)}">${d.category}</span>${tagBadges(d)}</td>
       <td class="pop">${d.pct1}%</td><td class="pop">${d.pct2}%</td><td class="pop">${d.pct3}%</td>
       <td><div class="sector-bar"><span style="width:${d.pct1}%;background:var(--s1)"></span><span style="width:${d.pct2}%;background:var(--s2)"></span><span style="width:${d.pct3}%;background:var(--s3)"></span></div></td>
+      <td class="desc univ-cell">${univList(d)}</td>
       <td class="desc">${d.description}</td></tr>`;
   }).join('');
 
