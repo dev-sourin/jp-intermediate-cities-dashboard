@@ -1,0 +1,15 @@
+{
+  "name": "日本の中都市135市 特徴ダッシュボード",
+  "short_name": "中都市ダッシュボード",
+  "description": "政令指定都市・東京都特別区を除く人口15万人以上の135市を、人口・産業構成・地域特色から比較できるダッシュボード",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f5f6f8",
+  "theme_color": "#2563eb",
+  "lang": "ja",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
