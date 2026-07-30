@@ -138,6 +138,11 @@
   tbody tr{ cursor:pointer; }
   tbody tr:hover{ background:var(--row-hover); }
   tbody tr:focus-within{ background:var(--row-hover); box-shadow:inset 3px 0 0 var(--accent); }
+  tr.detail-row{ cursor:default; }
+  tr.detail-row td{ background:var(--head-bg); padding:16px 20px; }
+  .row-detail{ display:flex; flex-wrap:wrap; gap:22px; align-items:flex-start; }
+  .row-detail-label{ font-size:.72rem; color:var(--muted); margin-bottom:4px; font-weight:600; }
+  .row-detail-desc{ flex:1 1 240px; font-size:.85rem; color:var(--muted); line-height:1.7; }
   tbody tr.selected-row{ background:var(--row-hover); box-shadow:inset 3px 0 0 var(--accent); }
   tbody tr.compare-row{ box-shadow:inset 3px 0 0 var(--s1); }
   tbody tr.selected-row.compare-row{ box-shadow:inset 3px 0 0 var(--accent), inset 6px 0 0 var(--s1); }
@@ -568,6 +573,7 @@
             <th scope="col">産業構成</th>
             <th class="sortable" scope="col" data-key="greenCoverPct"><button type="button" class="th-sort">緑被率 <span class="sort-arrow" data-arrow="greenCoverPct"></span></button></th>
             <th scope="col">大学</th>
+            <th scope="col">主要産業品目</th>
             <th scope="col">説明</th>
           </tr>
         </thead>
@@ -613,6 +619,7 @@ const prefectures = [...new Set(DATA.map(d=>d.prefecture))].sort((a,b)=>PREF_ORD
 let selectedKey = null;
 let compareSet = new Set();
 let sortKey = 'population', sortDir = -1;
+let expandedRowKey = null;
 
 /* ---------- Tabs ---------- */
 document.querySelectorAll('.tab-btn').forEach(btn=>{
@@ -869,18 +876,46 @@ DATA.forEach(d=> (d.tags||[]).forEach(t=> tagMeta.set(t.key, t.label)));
   const o = document.createElement('option'); o.value = key; o.textContent = `施設タグ: ${label}あり`; tagSel.appendChild(o);
 });
 function hasTag(d, key){ return (d.tags||[]).some(t=>t.key===key); }
-function tagBadges(d){
+/* mode 'list' expands the row inline (stays on the list tab); mode 'map' (default) jumps to the map and zooms in */
+function tagBadges(d, mode){
   const key = cityKey(d);
+  const action = mode === 'list' ? `toggleRowDetail('${key}')` : `focusCityOnMap('${key}')`;
+  const hint = mode === 'list' ? 'クリックで詳細を表示' : 'クリックで地図を拡大';
   return (d.tags||[]).map(t=>
-    `<span class="fac-tag" role="button" tabindex="0" title="クリックで地図を拡大: ${t.items.join('、')}" onclick="event.stopPropagation(); focusCityOnMap('${key}')" onkeydown="if(event.key==='Enter'){event.stopPropagation(); focusCityOnMap('${key}');}">${tagIconFor(t.key)} ${t.label}</span>`
+    `<span class="fac-tag" role="button" tabindex="0" title="${hint}: ${t.items.join('、')}" onclick="event.stopPropagation(); ${action}" onkeydown="if(event.key==='Enter'){event.stopPropagation(); ${action};}">${tagIconFor(t.key)} ${t.label}</span>`
   ).join('');
 }
+function toggleRowDetail(key){
+  expandedRowKey = (expandedRowKey === key) ? null : key;
+  renderTable();
+}
+function renderRowDetail(d){
+  return `<tr class="detail-row"><td colspan="14">
+    <div class="row-detail">
+      <div>
+        <div class="row-detail-label">産業構成</div>
+        <div class="sector-bar" style="width:220px;">
+          <span style="width:${d.pct1}%;background:var(--s1)"></span>
+          <span style="width:${d.pct2}%;background:var(--s2)"></span>
+          <span style="width:${d.pct3}%;background:var(--s3)"></span>
+        </div>
+        <div style="font-size:.78rem; color:var(--muted); margin-top:4px;">1次 ${d.pct1}% / 2次 ${d.pct2}% / 3次 ${d.pct3}% (${d.industryType})</div>
+      </div>
+      ${hasTag(d,'university') ? `<div><div class="row-detail-label">🎓 大学</div>${tagItemList(d,'university')}</div>` : ''}
+      ${hasTag(d,'industry_item') ? `<div><div class="row-detail-label">🏭 主要産業品目</div>${tagItemList(d,'industry_item')}</div>` : ''}
+      ${hasTag(d,'coastal') ? `<div><div class="row-detail-label">🌊 海に面する</div>${tagItemList(d,'coastal')}</div>` : ''}
+      <div><div class="row-detail-label">緑被率</div>${d.greenCoverPct}%(町丁目平均)</div>
+      <div class="row-detail-desc">${d.description}</div>
+    </div>
+  </td></tr>`;
+}
 function tagSearchText(d){ return (d.tags||[]).flatMap(t=>[t.label, ...t.items]).join(' '); }
-function univList(d){
-  const t = (d.tags||[]).find(t=>t.key==='university');
+function tagItemList(d, key){
+  const t = (d.tags||[]).find(t=>t.key===key);
   if(!t || !t.items.length) return '<span style="color:var(--muted);">—</span>';
   return t.items.map(n=>`・${n}`).join('<br>');
 }
+function univList(d){ return tagItemList(d, 'university'); }
 
 /* region -> prefecture narrows the prefecture list so the two filters work together, not against each other */
 regionSel.addEventListener('change', ()=>{
@@ -931,12 +966,13 @@ function renderTable(){
       <td><b>${d.city}</b></td><td>${d.prefecture}</td>
       <td><span class="region-tag">${d.region}</span></td>
       <td class="pop" style="${barBG(d.population, popMin, popMax, '37,99,235')}">${d.population.toLocaleString()}</td>
-      <td><span class="tag" style="background:${catColor(d.category)}">${d.category}</span>${tagBadges(d)}</td>
+      <td><span class="tag" style="background:${catColor(d.category)}">${d.category}</span>${tagBadges(d, 'list')}</td>
       <td class="pop">${d.pct1}%</td><td class="pop">${d.pct2}%</td><td class="pop">${d.pct3}%</td>
       <td><div class="sector-bar"><span style="width:${d.pct1}%;background:var(--s1)"></span><span style="width:${d.pct2}%;background:var(--s2)"></span><span style="width:${d.pct3}%;background:var(--s3)"></span></div></td>
       <td class="pop" style="${barBG(d.greenCoverPct, greenMin, greenMax, '22,163,74')}" title="町丁目単位緑被率の単純平均(n=${d.greenCoverN})">${d.greenCoverPct}%</td>
       <td class="desc univ-cell">${univList(d)}</td>
-      <td class="desc">${d.description}</td></tr>`;
+      <td class="desc univ-cell">${tagItemList(d, 'industry_item')}</td>
+      <td class="desc">${d.description}</td></tr>${key===expandedRowKey ? renderRowDetail(d) : ''}`;
   }).join('');
 
   tbody.querySelectorAll('tr').forEach(tr=>{
