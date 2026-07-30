@@ -206,6 +206,8 @@
   .info-panel dl{ display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:10px 20px; margin:0 0 14px; font-size:.85rem; }
   .info-panel dt{ color:var(--muted); }
   .info-panel dd{ margin:0; font-weight:700; font-variant-numeric:tabular-nums; }
+  .mini-meter{ height:5px; background:var(--head-bg); border-radius:3px; overflow:hidden; margin-top:6px; }
+  .mini-meter span{ display:block; height:100%; }
   .info-panel .body{ font-size:.85rem; color:var(--muted); line-height:1.8; margin:10px 0 0; padding-top:12px; border-top:1px solid var(--border); }
 
   /* ---- compare ---- */
@@ -264,6 +266,9 @@
   .match-score.hi{ background:#047857; color:#fff; }
   .match-score.mid{ background:var(--head-bg); color:var(--text); border:1px solid var(--border); }
   .match-score.lo{ background:var(--head-bg); color:var(--muted); border:1px solid var(--border); }
+  .score-dots{ display:inline-flex; gap:3px; vertical-align:middle; margin-left:6px; }
+  .score-dots .dot{ width:7px; height:7px; border-radius:50%; background:var(--border); }
+  .score-dots .dot.filled{ background:#047857; }
   .match-reason{ color:var(--muted); font-size:.82rem; line-height:1.6; }
 
   /* ---- footer facts ---- */
@@ -701,6 +706,14 @@ function projectCity(d){
 const popMin = Math.min(...DATA.map(d=>d.population));
 const popMax = Math.max(...DATA.map(d=>d.population));
 const radiusFor = p => 3.5 + (p - popMin) / (popMax - popMin) * 12;
+const greenMin = Math.min(...DATA.map(d=>d.greenCoverPct));
+const greenMax = Math.max(...DATA.map(d=>d.greenCoverPct));
+
+/* inline "data bar" background so raw numbers in the table read as magnitude at a glance */
+function barBG(value, min, max, rgb){
+  const pct = Math.max(3, Math.min(100, ((value-min)/(max-min))*100));
+  return `background:linear-gradient(to right, rgba(${rgb},.22) ${pct}%, transparent ${pct}%);`;
+}
 
 /* keep circles a legible, near-constant screen size as the map is zoomed (vb.w shrinks on zoom-in) */
 function updateDotRadii(vbw){
@@ -769,10 +782,12 @@ function renderInfoPanel(){
     <h3>${d.city} <span class="tag" style="background:${catColor(d.category)}">${d.category}</span>${tagBadges(d)}</h3>
     <div class="pref">${d.prefecture} / ${d.region}地方</div>
     <dl>
-      <dt>人口</dt><dd>${d.population.toLocaleString()}人(全国${d.rank}位)</dd>
+      <dt>人口</dt><dd>${d.population.toLocaleString()}人(全国${d.rank}位)
+        <div class="mini-meter"><span style="width:${((d.population-popMin)/(popMax-popMin)*100).toFixed(0)}%;background:#2563eb"></span></div></dd>
       <dt>産業構成タイプ</dt><dd>${d.industryType}</dd>
       <dt>就業者構成</dt><dd>1次 ${d.pct1}% / 2次 ${d.pct2}% / 3次 ${d.pct3}%</dd>
-      <dt>緑被率</dt><dd>${d.greenCoverPct}%(町丁目平均、n=${d.greenCoverN})</dd>
+      <dt>緑被率</dt><dd>${d.greenCoverPct}%(町丁目平均、n=${d.greenCoverN})
+        <div class="mini-meter"><span style="width:${((d.greenCoverPct-greenMin)/(greenMax-greenMin)*100).toFixed(0)}%;background:#16a34a"></span></div></dd>
       ${hasTag(d,'university') ? `<dt>大学</dt><dd>${(d.tags.find(t=>t.key==='university').items).join('、')}</dd>` : ''}
     </dl>
     <div class="sector-bar" style="width:100%;">
@@ -864,11 +879,11 @@ function renderTable(){
       <td class="cmp-cell" data-nosel="1"><input type="checkbox" class="cmp" data-key="${key}" aria-label="${d.city}を比較に追加" ${cmp?'checked':''} ${(!cmp&&compareSet.size>=4)?'disabled':''}></td>
       <td>${d.rank}</td><td><b>${d.city}</b></td><td>${d.prefecture}</td>
       <td><span class="region-tag">${d.region}</span></td>
-      <td class="pop">${d.population.toLocaleString()}</td>
+      <td class="pop" style="${barBG(d.population, popMin, popMax, '37,99,235')}">${d.population.toLocaleString()}</td>
       <td><span class="tag" style="background:${catColor(d.category)}">${d.category}</span>${tagBadges(d)}</td>
       <td class="pop">${d.pct1}%</td><td class="pop">${d.pct2}%</td><td class="pop">${d.pct3}%</td>
       <td><div class="sector-bar"><span style="width:${d.pct1}%;background:var(--s1)"></span><span style="width:${d.pct2}%;background:var(--s2)"></span><span style="width:${d.pct3}%;background:var(--s3)"></span></div></td>
-      <td class="pop" title="町丁目単位緑被率の単純平均(n=${d.greenCoverN})">${d.greenCoverPct}%</td>
+      <td class="pop" style="${barBG(d.greenCoverPct, greenMin, greenMax, '22,163,74')}" title="町丁目単位緑被率の単純平均(n=${d.greenCoverN})">${d.greenCoverPct}%</td>
       <td class="desc univ-cell">${univList(d)}</td>
       <td class="desc">${d.description}</td></tr>`;
   }).join('');
@@ -957,22 +972,49 @@ function hbar(id, rows, key, label, color){
   });
 }
 
+/* draws a headline number + label in the hole of a doughnut chart, so the chart itself carries the key takeaway */
+const centerTextPlugin = {
+  id:'centerText',
+  afterDraw(chart){
+    const cfg = chart.config.options.plugins.centerText;
+    if(!cfg) return;
+    const { ctx, chartArea:{ left,right,top,bottom } } = chart;
+    const cx = (left+right)/2, cy = (top+bottom)/2;
+    ctx.save();
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.font = '700 1.3rem "Hiragino Kaku Gothic ProN","Yu Gothic",sans-serif';
+    ctx.fillStyle = cssVar('--text');
+    ctx.fillText(cfg.title, cx, cy - 10);
+    ctx.font = '.72rem "Hiragino Kaku Gothic ProN","Yu Gothic",sans-serif';
+    ctx.fillStyle = cssVar('--muted');
+    ctx.fillText(cfg.subtitle, cx, cy + 14);
+    ctx.restore();
+  }
+};
+Chart.register(centerTextPlugin);
+
 function buildCharts(){
   Object.values(charts).forEach(c=> c && c.destroy());
   charts = {};
 
   charts.pop = hbar('popChart', DATA.slice().sort((a,b)=>b.population-a.population).slice(0,20), 'population', '人口', cssVar('--accent'));
 
+  const regionCounts = regions.map(r=>DATA.filter(d=>d.region===r).length);
+  const topRegionIdx = regionCounts.indexOf(Math.max(...regionCounts));
   charts.region = new Chart(document.getElementById('regionChart'), {
     type:'doughnut',
-    data:{ labels:regions, datasets:[{ data:regions.map(r=>DATA.filter(d=>d.region===r).length), backgroundColor:chartPalette }] },
-    options:{ maintainAspectRatio:false, plugins:{ legend:legendOpts() } }
+    data:{ labels:regions, datasets:[{ data:regionCounts, backgroundColor:chartPalette }] },
+    options:{ maintainAspectRatio:false, cutout:'62%', plugins:{ legend:legendOpts(),
+      centerText:{ title:`${regionCounts[topRegionIdx]}市`, subtitle:`最多: ${regions[topRegionIdx]}` } } }
   });
 
+  const categoryCounts = categories.map(c=>DATA.filter(d=>d.category===c).length);
+  const topCategoryIdx = categoryCounts.indexOf(Math.max(...categoryCounts));
   charts.category = new Chart(document.getElementById('categoryChart'), {
     type:'doughnut',
-    data:{ labels:categories, datasets:[{ data:categories.map(c=>DATA.filter(d=>d.category===c).length), backgroundColor:categories.map(catColor) }] },
-    options:{ maintainAspectRatio:false, plugins:{ legend:legendOpts() } }
+    data:{ labels:categories, datasets:[{ data:categoryCounts, backgroundColor:categories.map(catColor) }] },
+    options:{ maintainAspectRatio:false, cutout:'62%', plugins:{ legend:legendOpts(),
+      centerText:{ title:`${categoryCounts[topCategoryIdx]}市`, subtitle:'最多の特色' } } }
   });
 
   charts.greenTop = hbar('greenTopChart', DATA.slice().sort((a,b)=>b.greenCoverPct-a.greenCoverPct).slice(0,15), 'greenCoverPct', '緑被率(%)', '#16a34a');
@@ -1135,6 +1177,13 @@ function scoreBadge(total){
   if(total >= 2) return { cls:'mid', label:'○ 相性あり' };
   return { cls:'lo', label:'△ 限定的' };
 }
+/* 5-dot meter gives the score an at-a-glance shape instead of only a text label */
+function scoreDots(total){
+  const filled = Math.min(5, Math.max(1, Math.round(total/3.5*5)));
+  return `<span class="score-dots" aria-hidden="true">${
+    Array.from({length:5}, (_,i)=> `<span class="dot ${i<filled?'filled':''}"></span>`).join('')
+  }</span>`;
+}
 
 let matchBaseKey = null;
 function setMatchBase(key){
@@ -1168,7 +1217,7 @@ function renderMatchResults(){
       <td>${i+1}</td>
       <td><b>${d.city}</b><div style="color:var(--muted); font-size:.78rem;">${d.prefecture} ${regionNote}</div></td>
       <td><span class="tag" style="background:${catColor(d.category)}">${d.category}</span></td>
-      <td><span class="match-score ${badge.cls}">${badge.label}</span></td>
+      <td><span class="match-score ${badge.cls}">${badge.label}</span>${scoreDots(m.total)}</td>
       <td class="match-reason">${m.reason}</td>
     </tr>`;
   }).join('');
@@ -1220,7 +1269,7 @@ function renderIntraMatch(){
       <td>${i+1}</td>
       <td><b>${a.city}</b> × <b>${b.city}</b></td>
       <td><span class="tag" style="background:${catColor(a.category)}">${a.category}</span> <span class="tag" style="background:${catColor(b.category)}">${b.category}</span></td>
-      <td><span class="match-score ${badge.cls}">${badge.label}</span></td>
+      <td><span class="match-score ${badge.cls}">${badge.label}</span>${scoreDots(score)}</td>
       <td class="match-reason">${reason}</td>
     </tr>`;
   }).join('');
