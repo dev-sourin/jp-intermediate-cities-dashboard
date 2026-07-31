@@ -140,9 +140,23 @@
   tbody tr:focus-within{ background:var(--row-hover); box-shadow:inset 3px 0 0 var(--accent); }
   tr.detail-row{ cursor:default; }
   tr.detail-row td{ background:var(--head-bg); padding:16px 20px; }
+  .row-detail-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; }
+  .row-detail-head b{ font-size:.95rem; }
+  .row-detail-close{
+    background:var(--card); border:1px solid var(--border); border-radius:999px; color:var(--muted);
+    font-family:inherit; font-size:.76rem; padding:5px 12px; cursor:pointer;
+  }
+  .row-detail-close:hover{ color:var(--text); border-color:var(--accent); }
   .row-detail{ display:flex; flex-wrap:wrap; gap:22px; align-items:flex-start; }
   .row-detail-label{ font-size:.72rem; color:var(--muted); margin-bottom:4px; font-weight:600; }
   .row-detail-desc{ flex:1 1 240px; font-size:.85rem; color:var(--muted); line-height:1.7; }
+  .row-expand-btn{
+    background:none; border:1px solid var(--border); border-radius:6px; color:var(--muted);
+    width:26px; height:26px; line-height:1; cursor:pointer; font-size:.8rem;
+    transition:transform .15s;
+  }
+  .row-expand-btn:hover{ border-color:var(--accent); color:var(--accent); }
+  .row-expand-btn.open{ transform:rotate(180deg); background:var(--accent); border-color:var(--accent); color:#fff; }
   tbody tr.selected-row{ background:var(--row-hover); box-shadow:inset 3px 0 0 var(--accent); }
   tbody tr.compare-row{ box-shadow:inset 3px 0 0 var(--s1); }
   tbody tr.selected-row.compare-row{ box-shadow:inset 3px 0 0 var(--accent), inset 6px 0 0 var(--s1); }
@@ -165,6 +179,8 @@
     cursor:pointer;
   }
   .fac-tag:hover{ background:var(--accent); color:#fff; }
+  .fac-tag.static{ cursor:help; }
+  .fac-tag.static:hover{ background:var(--card); color:var(--accent); }
   .sector-bar{ display:flex; width:108px; height:14px; border-radius:3px; overflow:hidden; border:1px solid var(--border); }
   .sector-bar span{ height:100%; }
 
@@ -535,6 +551,13 @@
   </section>
 
   <section class="tabpanel" id="tab-list" role="tabpanel" aria-labelledby="tabbtn-list">
+    <div class="card" style="margin-bottom:16px;">
+      <h2>人口規模による「中都市」の定義</h2>
+      <p class="sub">「中都市」をどう定義するかは複数の考え方があります。切り替えると下の一覧がその定義に絞り込まれます(このデータセット自体が総務省基準の15万人以上で収集済みのため、それより下限が低い定義では実際には市が追加されるわけではない点に注意してください)。</p>
+      <label class="sr-only" for="citySizeDef">中都市の定義</label>
+      <select id="citySizeDef" style="width:100%; margin-top:4px;"></select>
+      <div class="note" id="citySizeDefNote" style="margin-top:12px;"></div>
+    </div>
     <div class="controls">
       <label class="sr-only" for="search">都市名・都道府県・説明文で検索</label>
       <input type="text" id="search" placeholder="都市名・都道府県・説明文で検索...">
@@ -555,6 +578,7 @@
         <thead>
           <tr>
             <th scope="col">比較</th>
+            <th scope="col"><span class="sr-only">詳細を表示</span></th>
             <th class="sortable" scope="col" data-key="city"><button type="button" class="th-sort">市名 <span class="sort-arrow" data-arrow="city"></span></button></th>
             <th class="sortable" scope="col" data-key="prefecture"><button type="button" class="th-sort">都道府県 <span class="sort-arrow" data-arrow="prefecture"></span></button></th>
             <th class="sortable" scope="col" data-key="region"><button type="button" class="th-sort">地方 <span class="sort-arrow" data-arrow="region"></span></button></th>
@@ -866,13 +890,17 @@ DATA.forEach(d=> (d.tags||[]).forEach(t=> tagMeta.set(t.key, t.label)));
   const o = document.createElement('option'); o.value = key; o.textContent = `施設タグ: ${label}あり`; tagSel.appendChild(o);
 });
 function hasTag(d, key){ return (d.tags||[]).some(t=>t.key===key); }
-/* mode 'list' expands the row inline (stays on the list tab); mode 'map' (default) jumps to the map and zooms in */
+/* mode 'list': plain info chips (the row's own ▾ button opens the detail, so tags don't need to be clickable here);
+   mode 'map' (default): clicking a tag jumps to the map and zooms in on that city */
 function tagBadges(d, mode){
+  if(mode === 'list'){
+    return (d.tags||[]).map(t=>
+      `<span class="fac-tag static" title="${t.items.join('、')}">${tagIconFor(t.key)} ${t.label}</span>`
+    ).join('');
+  }
   const key = cityKey(d);
-  const action = mode === 'list' ? `toggleRowDetail('${key}')` : `focusCityOnMap('${key}')`;
-  const hint = mode === 'list' ? 'クリックで詳細を表示' : 'クリックで地図を拡大';
   return (d.tags||[]).map(t=>
-    `<span class="fac-tag" role="button" tabindex="0" title="${hint}: ${t.items.join('、')}" onclick="event.stopPropagation(); ${action}" onkeydown="if(event.key==='Enter'){event.stopPropagation(); ${action};}">${tagIconFor(t.key)} ${t.label}</span>`
+    `<span class="fac-tag" role="button" tabindex="0" title="クリックで地図を拡大: ${t.items.join('、')}" onclick="event.stopPropagation(); focusCityOnMap('${key}')" onkeydown="if(event.key==='Enter'){event.stopPropagation(); focusCityOnMap('${key}');}">${tagIconFor(t.key)} ${t.label}</span>`
   ).join('');
 }
 function toggleRowDetail(key){
@@ -880,7 +908,12 @@ function toggleRowDetail(key){
   renderTable();
 }
 function renderRowDetail(d){
-  return `<tr class="detail-row"><td colspan="11">
+  const key = cityKey(d);
+  return `<tr class="detail-row"><td colspan="12">
+    <div class="row-detail-head">
+      <b>${d.city}</b>
+      <button type="button" class="row-detail-close" onclick="toggleRowDetail('${key}')" aria-label="詳細を閉じる">✕ 閉じる</button>
+    </div>
     <div class="row-detail">
       <div>
         <div class="row-detail-label">産業構成</div>
@@ -907,8 +940,47 @@ regionSel.addEventListener('change', ()=>{
   if(list.includes(keep)) prefectureSel.value = keep;
 });
 
+/* ---------- 中都市の定義切り替え ----------
+   このデータセットは総務省基準(大都市=政令指定都市20市+東京23区を除く、15万人以上)で
+   収集済みのため、下限が15万人より低い定義を選んでも新たに市が増えるわけではない。
+   その点を毎回ノートで明示する。 */
+const CITY_SIZE_DEFS = [
+  { key:'mic', label:'総務省: 15万人以上(このデータセットの収集基準)',
+    note:'大都市(政令指定都市20市・東京都特別区)を除く人口15万人以上の市。このダッシュボードの標準範囲そのものです。',
+    test: d=>true },
+  { key:'mic_capped', label:'総務省(上限区切り): 15万〜50万人',
+    note:'総務省の定義に、上限50万人の区切りを加えたものです。',
+    test: d=>d.population<=500000 },
+  { key:'lgfw', label:'地方財政白書: 10万人以上',
+    note:'大都市を除く人口10万人以上の市。ただしこのデータセットの収集下限は15万人のため、実質的に総務省基準と同じ135市が対象になります(10万〜15万人の市はそもそもデータに含まれていません)。',
+    test: d=>true },
+  { key:'lgfw_capped', label:'地方財政白書(上限区切り): 10万〜50万人',
+    note:'地方財政白書の定義に上限50万人の区切りを加えたもの。収集下限の都合で「総務省(上限区切り)」と同一の結果になります。',
+    test: d=>d.population<=500000 },
+  { key:'tanaka_pop', label:'田中浩也氏の定義: 15万〜30万人(人口規模のみ)',
+    note:'人口規模だけで見た定義。平均的に人口20万人程度の都市というイメージに基づきます。',
+    test: d=>d.population>=150000 && d.population<=300000 },
+  { key:'unhabitat', label:'UN-Habitat(世界の定義): 5万〜100万人',
+    note:'大都市を除く人口5万〜100万人の市。収集下限が15万人のため実質的に全135市が対象、上限100万人は該当なし(最大人口は船橋市の65万人)。',
+    test: d=>true },
+  { key:'tanaka_view', label:'田中浩也氏の「中都市観」: 3条件をすべて満たす市',
+    note:'①人口15万〜30万人 ②緑被率30%以上かつ海に面する(自然と都市の混在) ③1次・2次・3次産業が共存(産業構成タイプが「標準型」)——の3条件をすべて満たす市だけに絞り込みます。',
+    test: d=>d.population>=150000 && d.population<=300000 && d.greenCoverPct>=30 && hasTag(d,'coastal') && d.industryType==='標準型' },
+];
+const citySizeSel = document.getElementById('citySizeDef');
+CITY_SIZE_DEFS.forEach(def=>{
+  citySizeSel.appendChild(new Option(def.label, def.key));
+});
+function updateCitySizeNote(){
+  const def = CITY_SIZE_DEFS.find(d=>d.key===citySizeSel.value) || CITY_SIZE_DEFS[0];
+  document.getElementById('citySizeDefNote').innerHTML = `<b>この定義の内容</b>: ${def.note}`;
+}
+citySizeSel.addEventListener('change', ()=>{ updateCitySizeNote(); renderTable(); });
+
 function matchesFilters(d){
   const q = document.getElementById('search').value.trim().toLowerCase();
+  const sizeDef = CITY_SIZE_DEFS.find(x=>x.key===citySizeSel.value) || CITY_SIZE_DEFS[0];
+  if(!sizeDef.test(d)) return false;
   if(regionSel.value && d.region !== regionSel.value) return false;
   if(prefectureSel.value && d.prefecture !== prefectureSel.value) return false;
   if(categorySel.value && d.category !== categorySel.value) return false;
@@ -942,15 +1014,17 @@ function renderTable(){
   tbody.innerHTML = rows.map(d=>{
     const key = cityKey(d);
     const cmp = compareSet.has(key);
+    const open = key === expandedRowKey;
     return `<tr class="${key===selectedKey?'selected-row':''} ${cmp?'compare-row':''}" data-key="${key}">
       <td class="cmp-cell" data-nosel="1"><input type="checkbox" class="cmp" data-key="${key}" aria-label="${d.city}を比較に追加" ${cmp?'checked':''} ${(!cmp&&compareSet.size>=4)?'disabled':''}></td>
+      <td data-nosel="1"><button type="button" class="row-expand-btn ${open?'open':''}" aria-expanded="${open}" aria-label="${d.city}の詳細を${open?'閉じる':'表示'}" onclick="event.stopPropagation(); toggleRowDetail('${key}')">▾</button></td>
       <td><b>${d.city}</b></td><td>${d.prefecture}</td>
       <td><span class="region-tag">${d.region}</span></td>
       <td class="pop" style="${barBG(d.population, popMin, popMax, '37,99,235')}">${d.population.toLocaleString()}</td>
       <td><span class="tag" style="background:${catColor(d.category)}">${d.category}</span>${tagBadges(d, 'list')}</td>
       <td class="pop">${d.pct1}%</td><td class="pop">${d.pct2}%</td><td class="pop">${d.pct3}%</td>
       <td><div class="sector-bar"><span style="width:${d.pct1}%;background:var(--s1)"></span><span style="width:${d.pct2}%;background:var(--s2)"></span><span style="width:${d.pct3}%;background:var(--s3)"></span></div></td>
-      <td class="pop" style="${barBG(d.greenCoverPct, greenMin, greenMax, '22,163,74')}" title="町丁目単位緑被率の単純平均(n=${d.greenCoverN})">${d.greenCoverPct}%</td></tr>${key===expandedRowKey ? renderRowDetail(d) : ''}`;
+      <td class="pop" style="${barBG(d.greenCoverPct, greenMin, greenMax, '22,163,74')}" title="町丁目単位緑被率の単純平均(n=${d.greenCoverN})">${d.greenCoverPct}%</td></tr>${open ? renderRowDetail(d) : ''}`;
   }).join('');
 
   tbody.querySelectorAll('tr').forEach(tr=>{
@@ -1389,6 +1463,7 @@ document.querySelectorAll('.match-mode-btn').forEach(btn=>{
 
 /* ---------- init ---------- */
 updateSortArrows();
+updateCitySizeNote();
 renderTable();
 renderInfoPanel();
 renderTray();
